@@ -218,6 +218,16 @@ header p.by a{color:#fff;font-weight:600;text-decoration:underline;text-underlin
  #detail .act{padding:10px 14px 14px}
  .maplibregl-ctrl-bottom-right{margin-bottom:4px}
 }
+.lvrow{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.lvb{display:inline-block;color:#fff;font-weight:700;font-size:17px;border-radius:8px;padding:6px 14px}
+.lvd{font-size:15px;font-weight:600;color:var(--ink)}
+#detail .tripr{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#detail .tripr input{font:inherit;font-size:14px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;min-height:36px}
+#detail ol.trip{list-style:none;padding:0;margin:10px 0 6px;border-left:3px solid #0d5a6e}
+#detail ol.trip li{display:flex;gap:10px;padding:5px 0 5px 10px;font-size:14px;position:relative}
+#detail ol.trip li::before{content:"";position:absolute;left:-7px;top:11px;width:11px;height:11px;border-radius:50%;background:#fff;border:2px solid #0d5a6e}
+#detail ol.trip a{color:var(--deep)}
+#detail ol.trip .tt{font-weight:700;font-variant-numeric:tabular-nums;min-width:44px}
 </style>
 </head>
 <body>
@@ -429,6 +439,45 @@ function showImpressum(){sel=null;selV4('',-1);const S=[['Herausgeber','VIANDAR 
  $('detail').innerHTML=`<div class="top" style="background:var(--deep)"><h2>Impressum und Quellen</h2><div class="sec">Daten, Lizenzen, Hinweise</div><button class="x" aria-label="Schliessen">×</button></div><div class="body"><div class="blk"><dl>${S.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl></div><div class="blk"><p class="mu small">Alle Angaben ohne Gewähr. Pegel, Uferseiten und Wetter sind Hilfen zur Planung und ersetzen keine Beurteilung vor Ort. Massgebend sind die Signalisation und die kantonalen Vorschriften.</p></div></div>`;openDetail()}
 document.addEventListener('click',e=>{const a=e.target.closest('a[href="#impressum"]');if(a){e.preventDefault();showImpressum()}});
 
+
+// Paddelzeit (Richtwert) und ÖV Reise ab Standort mit Rückreise
+const SPD={0:6,1:6,2:6,3:4.5,4:3.5,5:2.5,6:2};
+function sunset(d,la,lo){const r=Math.PI/180,n=Math.floor((Date.UTC(d.getFullYear(),d.getMonth(),d.getDate())-Date.UTC(2000,0,1))/864e5)-lo/360;const M=(357.5291+0.98560028*n)%360;const C=1.9148*Math.sin(M*r)+0.02*Math.sin(2*M*r)+0.0003*Math.sin(3*M*r);const L=(M+C+282.9372)%360;const jt=2451545+n+0.0053*Math.sin(M*r)-0.0069*Math.sin(2*L*r);const dec=Math.asin(Math.sin(L*r)*Math.sin(23.44*r));const w=Math.acos((Math.sin(-0.833*r)-Math.sin(la*r)*Math.sin(dec))/(Math.cos(la*r)*Math.cos(dec)))/r;return new Date((jt+w/360-2440587.5)*864e5)}
+const paddleMin=o=>o.lenM?Math.max(15,Math.round(o.lenM/1000/(SPD[bucket(o)]||5)*60/5)*5):null;
+const fmtMin=m=>m>=60?`${Math.floor(m/60)} h${m%60?' '+(m%60)+' min':''}`:`${m} min`;
+const hm=d=>d.toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'});
+const addM=(d,m)=>new Date(d.getTime()+m*60000);
+const walkMin=dm=>Math.max(1,Math.ceil((dm||0)*1.25/75));
+const ovCache=new Map();
+function ovCHc(p){const k=p.la.toFixed(5)+','+p.lo.toFixed(5);if(!ovCache.has(k))ovCache.set(k,ovCH(p).catch(e=>{ovCache.delete(k);throw e}));return ovCache.get(k)}
+function sbbTrip(a,b,dt){const S=[{value:String(a.id),type:'ID',label:a.name},{value:String(b.id),type:'ID',label:b.name}];const d=dt.toLocaleDateString('sv-SE');return'https://www.sbb.ch/de?stops='+encodeURIComponent(JSON.stringify(S))+'&date='+encodeURIComponent(JSON.stringify(d))+'&time='+encodeURIComponent(JSON.stringify(hm(dt)))+'&moment='+encodeURIComponent('"DEPARTURE"')}
+function tripBlock(pm){const n=new Date(Date.now()+5*60000);n.setMinutes(Math.ceil(n.getMinutes()/5)*5,0,0);const v=new Date(n.getTime()-n.getTimezoneOffset()*60000).toISOString().slice(0,16);
+ return`<div class="blk"><h3>ÖV Reise ab meinem Standort</h3><div class="tripf"><label class="l" for="tripT">Abfahrt frühestens</label><div class="tripr"><input type="datetime-local" id="tripT" value="${v}"><button class="btn p" id="tripGo" type="button">Verbindung suchen</button></div></div><p class="mu small">Nutzt den Standort deines Browsers für die nächste Haltestelle. Geplant werden 30 min zum Boot richten und Einwassern, ${pm?'die Paddelzeit von ca. '+fmtMin(pm):'die Paddelzeit'} und 30 min zum Auswassern und Zusammenpacken. Danach die Rückreise an deinen Standort.</p><div id="tripOut" aria-live="polite"></div></div>`}
+function wireTrip(ends,pm,label){const b=$('tripGo');if(!b)return;b.onclick=()=>runTrip(ends,pm,label)}
+function geo(){return new Promise((res,rej)=>{if(!navigator.geolocation)return rej(new Error('Dein Browser gibt keinen Standort heraus.'));navigator.geolocation.getCurrentPosition(p=>res({la:p.coords.latitude,lo:p.coords.longitude}),e=>rej(new Error(e.code===1?'Der Standort wurde nicht freigegeben. Erlaube den Standort für diese Seite im Browser.':'Der Standort konnte nicht bestimmt werden.')),{enableHighAccuracy:false,timeout:15000,maximumAge:300000})})}
+async function conn(a,b,dt){const u=`https://transport.opendata.ch/v1/connections?from=${encodeURIComponent(a.id)}&to=${encodeURIComponent(b.id)}&date=${dt.toLocaleDateString('sv-SE')}&time=${hm(dt)}&limit=4`;const j=await fetch(u).then(r=>r.json());return(j.connections||[]).map(c=>({dep:new Date(c.from.departure),arr:new Date(c.to.arrival),pl:c.from.platform,tr:c.transfers,pr:(c.products||[]).join(', '),from:c.from.station.name,to:c.to.station.name})).filter(c=>c.dep>=addM(dt,-1)).sort((x,y)=>x.dep-y.dep)[0]||null}
+async function runTrip(ends,pm,label){const out=$('tripOut');const tok=ovToken;const st=t=>{if(tok===ovToken&&$('tripOut'))out.innerHTML=t};
+ st('<p class="mu">Standort wird bestimmt.</p>');
+ try{const me=await geo();st('<p class="mu">Verbindungen werden gesucht.</p>');
+  const [home,inS,outS]=await Promise.all([ovCH({la:me.la,lo:me.lo}),ovCHc(ends[0]),ovCHc(ends[ends.length-1])]);
+  if(!home)throw new Error('Keine Haltestelle bei deinem Standort gefunden.');if(!inS||!outS)throw new Error('Keine Haltestelle beim Ein- oder Ausstieg gefunden.');
+  const t0=new Date($('tripT').value||Date.now());
+  const hin=home.id===inS.id?{dep:t0,arr:t0,pr:'',same:1}:await conn(home,inS,t0);if(!hin)throw new Error('Keine Verbindung zum Einstieg gefunden.');
+  const wIn=walkMin(inS.d),wOut=walkMin(outS.d);
+  const atPut=addM(hin.arr,wIn),onWater=addM(atPut,30),offWater=addM(onWater,pm||0),ready=addM(offWater,30),atStop=addM(ready,wOut);
+  const zur=home.id===outS.id?{dep:atStop,arr:atStop,same:1}:await conn(outS,home,atStop);
+  const row=(t,txt,sub)=>`<li><span class="tt">${t}</span><span>${txt}${sub?`<br><span class="mu">${sub}</span>`:''}</span></li>`;
+  let h=`<ol class="trip">`;
+  if(!hin.same)h+=row(hm(hin.dep),`Abfahrt <b>${esc(home.name)}</b>`,`${esc(hin.pr)}${hin.pl?' · Gleis/Kante '+esc(hin.pl):''}${hin.tr?' · '+hin.tr+' Umstieg'+(hin.tr>1?'e':''):''} · <a href="${esc(sbbTrip(home,inS,hin.dep))}" target="_blank" rel="noopener">bei SBB</a>`)+row(hm(hin.arr),`Ankunft <b>${esc(inS.name)}</b>`,`Fussweg zum Einstieg ca. ${wIn} min`);
+  h+=row(hm(atPut),'Boot richten und Einwassern','30 min')+row(hm(onWater),`Paddeln ${esc(label)}`,pm?`ca. ${fmtMin(pm)}, Richtwert`:'Paddelzeit unbekannt')+row(hm(offWater),'Auswassern und Zusammenpacken',`30 min, danach Fussweg ca. ${wOut} min zu ${esc(outS.name)}`);
+  if(zur&&!zur.same)h+=row(hm(zur.dep),`Abfahrt <b>${esc(outS.name)}</b>`,`${esc(zur.pr)}${zur.pl?' · Gleis/Kante '+esc(zur.pl):''}${zur.tr?' · '+zur.tr+' Umstieg'+(zur.tr>1?'e':''):''} · <a href="${esc(sbbTrip(outS,home,zur.dep))}" target="_blank" rel="noopener">bei SBB</a>`)+row(hm(zur.arr),`Ankunft <b>${esc(home.name)}</b>`,'zurück an deinem Standort');
+  else if(!zur)h+=row(hm(atStop),'Keine Rückverbindung gefunden','Spätere Abfahrt wählen oder früher starten');
+  h+='</ol>';
+  {const e=ends[ends.length-1];const ss=sunset(offWater,e.la,e.lo);if(offWater>ss)h+=`<div class="wxw">Auswassern erst nach Sonnenuntergang (${hm(ss)} Uhr). Früher starten oder kürzere Strecke wählen.</div>`}
+  if(zur&&!zur.same&&zur.dep.toDateString()!==t0.toDateString())h+='<div class="wxw">Die Rückreise ist erst am nächsten Tag möglich. Früher starten.</div>';
+  h+=`<p class="mu small">Haltestelle bei dir: ${esc(home.name)} (${esc(fmtD(home.d))}). Fahrplan transport.opendata.ch. Paddelzeit ist ein Richtwert ohne Pausen und Besichtigungen. Plane Reserve ein.</p>`;
+  st(h)}catch(e){st(`<p class="mu">${esc(e.message||'Verbindung konnte nicht gesucht werden.')}</p>`)}}
+
 // Detailansichten Paddel Buch
 const pbTop=(t,sub,bg)=>`<div class="top pbtop" style="background:${bg||RG}"><div class="brand pb">Paddel Buch</div><h2>${esc(t)}</h2><div class="sec">${sub}</div><button class="x" aria-label="Schliessen">×</button></div>`;
 const txt=t=>t?`<p class="pbtxt">${esc(t).replace(/\n/g,'<br>')}</p>`:'';
@@ -620,7 +669,7 @@ function levelBlock(o){
  const c=o.cal;let h='<div class="blk"><h3>Wasserstand</h3>';
  if(!c||!o.ref)return h+'<p class="mu">Keine Messstation hinterlegt.</p></div>';
  const lv=levelOf(o);const v=refValue(o);const sts=o.ref.keys.map(k=>STA.get(k)).filter(Boolean);
- if(lv!=='na')h+=`<div class="lvl" style="background:${LV[lv].c}"><b>${LV[lv].t}</b><span>${esc(LV[lv].d)}</span></div>`;h+='<dl>';
+ if(lv!=='na')h+=`<div class="lvrow"><span class="lvb" style="background:${LV[lv].c}">${LV[lv].t}</span><span class="lvd">${esc(LV[lv].d)}</span></div>`;h+='<dl>';
  if(o.ref.mode==='sum')h+=`<dt>Messstationen</dt><dd>${sts.map(staLink).join(' plus ')}</dd>`;
  else if(o.ref.mode==='near')h+=`<dt>Messstation</dt><dd>${staLink(sts[0])}</dd>`;
  else if(o.ref.mode==='nolive')h+=`<dt>Referenzstation</dt><dd>${esc(o.ref.name.replace(' @ ',' ').replace('[estimated]','').trim())}</dd>`;
@@ -640,16 +689,17 @@ function select(o,fly){
  sel=o;const d=$('detail');const colr=GC[bucket(o)]||GC[0];
  const len=o.lenM?(o.lenM/1000).toFixed(1)+' km':o.km!=null?fmtD(o.km*1000)+' Luftlinie':null;
  const rows=[['Typ',TYP[o.type]||o.type],['Schwierigkeit','WW '+(o.grade||'unbekannt')],o.spot?['Schlüsselstellen',o.spot]:null,['Land',CTY[o.cty]||o.cty],o.kt.length?['Kanton',o.kt.map(k=>KTN[k]||k).join(', ')]:null,len?['Länge',len]:null,o.vert?['Höhendifferenz',o.vert+' m']:null,[o.hasEnd?'Einstieg':'Lage',`${o.la.toFixed(4)}, ${o.lo.toFixed(4)}`],o.hasEnd?['Ausstieg',`${o.le.toFixed(4)}, ${o.ln.toFixed(4)}`]:null].filter(Boolean);
+ const pm=!isSpot(o)?paddleMin(o):null;if(pm){const i=rows.findIndex(r=>r[0]==='Länge');rows.splice(i+1,0,['Paddelzeit','ca. '+fmtMin(pm)+' (Richtwert)'])}
  const io=!isSpot(o)&&o.path?PB.io[o.id]:null;const sideS=x=>x?(+x.slice(1)>=5?SIDEA[x[0]]+' Ufer in Fliessrichtung':'Ufer unklar, Punkt nahe Flussmitte'):'';
  if(io){const i=rows.findIndex(r=>r[0]==='Einstieg');if(io[0])rows.splice(i+1,0,['Einwasserung',sideS(io[0])]);if(o.hasEnd&&io[1])rows.push(['Auswasserung',sideS(io[1])])}
  const mid=o.path&&o.path.length?o.path[Math.floor(o.path.length/2)]:[o.lo,o.la];
  const pts=o.path||[[o.lo,o.la]];
- d.innerHTML=`<div class="top" style="background:${colr}"><h2>${esc(o.river)}</h2><div class="sec">${esc(o.section)}</div><button class="x" aria-label="Schliessen">×</button></div><div class="body">${levelBlock(o)}${isSpot(o)&&bucket(o)<3?'':eqBlock(o,waterTemp(o))}<div class="blk"><h3>Strecke</h3><dl>${rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${io?'<p class="mu small">Uferseite berechnet aus Ein- und Ausstiegspunkt relativ zum Flusslauf. Vor Ort prüfen.</p>':''}</div>${wxBlock()}${ovBlock()}${o.cty==='CH'?obsList(mid[1],mid[0],Math.max(3,(o.lenM||0)/2000+2)):''}${poiBlock(o,pts)}${rulesFor(o)}<div class="act"><a class="btn p" href="https://rivermap.org/map/?inf=${o.id}" target="_blank" rel="noopener">Auf Rivermap öffnen</a><button class="btn" id="zoomTo">Hinzoomen</button></div></div>`;
+ d.innerHTML=`<div class="top" style="background:${colr}"><h2>${esc(o.river)}</h2><div class="sec">${esc(o.section)}</div><button class="x" aria-label="Schliessen">×</button></div><div class="body">${levelBlock(o)}${isSpot(o)&&bucket(o)<3?'':eqBlock(o,waterTemp(o))}<div class="blk"><h3>Strecke</h3><dl>${rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>${io?'<p class="mu small">Uferseite berechnet aus Ein- und Ausstiegspunkt relativ zum Flusslauf. Vor Ort prüfen.</p>':''}</div>${wxBlock()}${o.cty==='CH'&&o.hasEnd&&!isSpot(o)?tripBlock(pm):''}${ovBlock()}${o.cty==='CH'?obsList(mid[1],mid[0],Math.max(3,(o.lenM||0)/2000+2)):''}${poiBlock(o,pts)}${rulesFor(o)}<div class="act"><a class="btn p" href="https://rivermap.org/map/?inf=${o.id}" target="_blank" rel="noopener">Auf Rivermap öffnen</a><button class="btn" id="zoomTo">Hinzoomen</button></div></div>`;
  openDetail();d.querySelector('#zoomTo').onclick=()=>zoomTo(pts);
  if(mapReady){map.setFilter('rv-sel',['all',['==',['get','id'],o.id],['==',['get','k'],'line']]);map.setFilter('st-sel',['in',['get','k'],['literal',o.ref?o.ref.keys:[]]]);map.setFilter('pl-sel',['==',['get','id'],'-'])}
  if(fly)zoomTo(pts);renderList();
  selV4('',-1);loadWx(mid[1],mid[0]);wireLinks();
- const ends=[{t:'Einstieg',la:o.la,lo:o.lo}];if(o.hasEnd)ends.push({t:'Ausstieg',la:o.le,lo:o.ln});loadOv(ends,o.cty==='CH',o.id);
+ const ends=[{t:'Einstieg',la:o.la,lo:o.lo}];if(o.hasEnd)ends.push({t:'Ausstieg',la:o.le,lo:o.ln});loadOv(ends,o.cty==='CH',o.id);wireTrip(ends,pm,o.section);
 }
 function showStation(k,fly){
  const s=STA.get(k);if(!s)return;sel=null;const v=LIVE.get(k);const ids=(secBySta.get(k)||[]);const all=ids.map(i=>byId.get(i)).filter(Boolean);
@@ -662,11 +712,11 @@ function showStation(k,fly){
 }
 function showStage(s,fly){
  if(!s)return;sel=null;const pts=s.lines.flat();const r=s.route;
- $('detail').innerHTML=`<div class="top pltop"><div class="brand">Paddelland · SchweizMobil</div><h2>${esc(s.title)}</h2><div class="sec">Route ${esc(s.num)} · ${esc(s.start)} bis ${esc(s.end)}</div><button class="x" aria-label="Schliessen">×</button></div><div class="body"><div class="blk plinfo"><img src="${esc(r.logo)}" alt="Routensignet ${esc(s.num)}" width="64" height="64" onerror="this.remove()"><dl><dt>Länge</dt><dd>${esc(s.len)} km</dd><dt>Technik</dt><dd>${esc(GRD[s.grade]||s.grade||'?')}</dd><dt>Kondition</dt><dd>${esc(GRD[s.fit]||s.fit||'?')}</dd><dt>Kategorie</dt><dd>${r.cat==='national'?'Nationale Route':'Regionale Route'}</dd></dl></div><p class="blk mu small">Route aus dem Kanuland Schweiz (Paddelland) der Stiftung SchweizMobil. Beschreibung, Sicherheitstipps und Etappen auf schweizmobil.ch.</p>${wxBlock()}${ovBlock()}${poiBlock({river:'',kt:[]},pts)}<div class="act"><a class="btn p" href="${esc(s.url)}" target="_blank" rel="noopener">Bei SchweizMobil öffnen</a><button class="btn" id="zoomTo">Hinzoomen</button></div></div>`;
+ $('detail').innerHTML=`<div class="top pltop"><div class="brand">Paddelland · SchweizMobil</div><h2>${esc(s.title)}</h2><div class="sec">Route ${esc(s.num)} · ${esc(s.start)} bis ${esc(s.end)}</div><button class="x" aria-label="Schliessen">×</button></div><div class="body"><div class="blk plinfo"><img src="${esc(r.logo)}" alt="Routensignet ${esc(s.num)}" width="64" height="64" onerror="this.remove()"><dl><dt>Länge</dt><dd>${esc(s.len)} km</dd><dt>Paddelzeit</dt><dd>ca. ${fmtMin(Math.round(parseFloat(s.len)/4.5*60/5)*5)} (Richtwert)</dd><dt>Technik</dt><dd>${esc(GRD[s.grade]||s.grade||'?')}</dd><dt>Kondition</dt><dd>${esc(GRD[s.fit]||s.fit||'?')}</dd><dt>Kategorie</dt><dd>${r.cat==='national'?'Nationale Route':'Regionale Route'}</dd></dl></div><p class="blk mu small">Route aus dem Kanuland Schweiz (Paddelland) der Stiftung SchweizMobil. Beschreibung, Sicherheitstipps und Etappen auf schweizmobil.ch.</p>${wxBlock()}${tripBlock(Math.round(parseFloat(s.len)/4.5*60/5)*5)}${ovBlock()}${poiBlock({river:'',kt:[]},pts)}<div class="act"><a class="btn p" href="${esc(s.url)}" target="_blank" rel="noopener">Bei SchweizMobil öffnen</a><button class="btn" id="zoomTo">Hinzoomen</button></div></div>`;
  openDetail();$('detail').querySelector('#zoomTo').onclick=()=>zoomTo(pts);
  if(mapReady){map.setFilter('pl-sel',['==',['get','id'],s.id]);map.setFilter('rv-sel',['==',['get','id'],-1]);map.setFilter('st-sel',['==',['get','k'],'-'])}
  if(fly)zoomTo(pts);selV4('',-1);{const m=pts[Math.floor(pts.length/2)];loadWx(m[1],m[0])}
- const ends=endsOf(s.lines);loadOv([{t:'Start '+s.start,la:ends[0][1],lo:ends[0][0]},{t:'Ziel '+s.end,la:ends[1][1],lo:ends[1][0]}],true,'pl'+s.id);
+ const ends=endsOf(s.lines);{const E=[{t:'Start '+s.start,la:ends[0][1],lo:ends[0][0]},{t:'Ziel '+s.end,la:ends[1][1],lo:ends[1][0]}];loadOv(E,true,'pl'+s.id);wireTrip(E,Math.round(parseFloat(s.len)/4.5*60/5)*5,s.title)}
 }
 function endsOf(lines){let best=null;const all=lines.flatMap(l=>[l[0],l[l.length-1]]);for(const a of all)for(const b of all){const d=hav(a[1],a[0],b[1],b[0]);if(!best||d>best[0])best=[d,a,b]}return[best[1],best[2]]}
 function showPoi(p,fly){sel=null;selV4('',-1);$('detail').innerHTML=`<div class="top" style="background:${POIC[p.t]}"><h2>${esc(p.name)}</h2><div class="sec">${esc(POIT[p.t])}</div><button class="x" aria-label="Schliessen">×</button></div><div class="body"><div class="blk"><dl><dt>Adresse</dt><dd>${esc(p.addr)}</dd><dt>Webseite</dt><dd><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url.replace(/^https?:\/\//,'').replace(/\/$/,''))}</a></dd>${p.sc?`<dt>Swiss Canoe</dt><dd><a href="${esc(p.sc)}" target="_blank" rel="noopener">Standorte bei Swiss Canoe</a></dd>`:''}</dl></div>${wxBlock()}${ovBlock()}<div class="act"><a class="btn p" href="${esc(p.url)}" target="_blank" rel="noopener">Zur Webseite</a></div></div>`;openDetail();if(fly&&mapReady)map.flyTo({center:[p.lo,p.la],zoom:13,padding:pad(),duration:800});loadWx(p.la,p.lo);loadOv([{t:'Standort',la:p.la,lo:p.lo}],p.lo>5.9&&p.lo<10.5&&p.la>45.8&&p.la<47.81&&!/78\d{3}|Deutschland|Lindau|Konstanz|Reichenau|Bodman|Immenstaad|Wallhausen|Dingelsdorf|Litzelstetten/.test(p.addr),'poi'+p.id)}
@@ -681,7 +731,7 @@ let ovToken=0;
 const sbbLink=st=>'https://www.sbb.ch/de?stops='+encodeURIComponent(JSON.stringify([{value:String(st.id),type:'ID',label:st.name}]));
 async function ovCH(p){const j=await fetch(`https://transport.opendata.ch/v1/locations?x=${p.la}&y=${p.lo}&type=station`).then(r=>r.json());const st=(j.stations||[]).filter(s=>s.id&&s.coordinate&&s.coordinate.x);if(!st.length)return null;const s=st[0];let dep=[];try{const b=await fetch(`https://transport.opendata.ch/v1/stationboard?id=${s.id}&limit=4`).then(r=>r.json());dep=(b.stationboard||[]).map(x=>({t:x.stop.departure,l:(x.category||'')+(x.number&&x.number!==x.category?' '+x.number:''),to:x.to,pl:x.stop.platform}))}catch(e){}return{id:s.id,name:s.name,la:s.coordinate.x,lo:s.coordinate.y,d:s.distance!=null?s.distance:hav(p.la,p.lo,s.coordinate.x,s.coordinate.y)*1000,icon:s.icon,dep,ch:true}}
 async function ovOSM(p){const qq=`[out:json][timeout:15];(node[public_transport=platform](around:2500,${p.la},${p.lo});node[highway=bus_stop](around:2500,${p.la},${p.lo});node[railway~"^(station|halt|tram_stop)$"](around:2500,${p.la},${p.lo}););out body;`;for(const ep of['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter']){try{const ac=new AbortController();const t=setTimeout(()=>ac.abort(),12000);const j=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(qq),signal:ac.signal}).then(r=>r.json());clearTimeout(t);const c=j.elements.filter(e=>e.tags&&e.tags.name).map(e=>({name:e.tags.name,la:e.lat,lo:e.lon,d:hav(p.la,p.lo,e.lat,e.lon)*1000,rail:/station|halt/.test(e.tags.railway||'')||e.tags.train==='yes',osm:e.id})).sort((a,b)=>a.d-b.d);return c[0]||false}catch(e){}}return null}
-async function loadOv(ends,ch,tok){const my=++ovToken;const box=()=>$('ovBox');const res=await Promise.all(ends.map(e=>(ch?ovCH(e):ovOSM(e)).catch(()=>null)));if(my!==ovToken||!box())return;
+async function loadOv(ends,ch,tok){const my=++ovToken;const box=()=>$('ovBox');const res=await Promise.all(ends.map(e=>(ch?ovCHc(e):ovOSM(e)).catch(()=>null)));if(my!==ovToken||!box())return;
  const feats=[];const html=ends.map((e,i)=>{const s=res[i];if(s===null)return`<div class="ov"><b>${esc(e.t)}</b><p class="mu">Haltestellen konnten nicht geladen werden.</p></div>`;if(!s)return`<div class="ov"><b>${esc(e.t)}</b><p class="mu">Keine Haltestelle im Umkreis von 2.5 km gefunden.</p></div>`;feats.push({type:'Feature',properties:{n:s.name},geometry:{type:'Point',coordinates:[s.lo,s.la]}});
   return`<div class="ov"><b>${esc(e.t)}</b><p><span class="ovn">${esc(s.name)}</span> <span class="mu">${esc(fmtD(s.d))} Luftlinie</span></p>${s.dep&&s.dep.length?`<table class="dep">${s.dep.map(x=>`<tr><td>${esc(new Date(x.t).toLocaleTimeString('de-CH',{hour:'2-digit',minute:'2-digit'}))}</td><td>${esc(x.l)}</td><td>${esc(x.to)}</td></tr>`).join('')}</table>`:''}<p class="ovl">${s.ch?`<a href="${esc(sbbLink(s))}" target="_blank" rel="noopener">SBB Fahrplan ab ${esc(s.name)}</a> · <a href="https://www.viadi-app.ch" target="_blank" rel="noopener">Viadi Zero App</a>`:`<a href="https://www.openstreetmap.org/node/${esc(s.osm)}" target="_blank" rel="noopener">Haltestelle in OpenStreetMap</a>`}</p></div>`}).join('');
  box().innerHTML=html+(ch?'<p class="mu small">Abfahrten aus transport.opendata.ch, Daten der Fahrplankoordination Schweiz.</p>':'<p class="mu small">Haltestellen aus OpenStreetMap, ohne Fahrplan.</p>');
