@@ -245,6 +245,7 @@ header p.by a{color:#fff;font-weight:600;text-decoration:underline;text-underlin
 #detail dt button.zm{font-weight:600;color:var(--deep);text-decoration:underline;text-underline-offset:2px}
 #lg i.vr{width:14px;height:10px;background:rgba(179,38,30,.3);border:1.5px dashed #b3261e}
 #lg i.vr.e{background:rgba(217,119,6,.3);border-color:#d97706}
+.maplibregl-popup{pointer-events:none}
 </style>
 </head>
 <body>
@@ -407,11 +408,11 @@ function addV4Layers(){
  map.addLayer({id:'ob-port',type:'line',source:'ob',filter:['==',['get','k'],'port'],minzoom:12,paint:{'line-color':RGD,'line-width':4,'line-dasharray':[3,2,0.5,2]}});
  map.addLayer({id:'io-sym',type:'symbol',source:'io',minzoom:11,layout:{'icon-image':['get','ic'],'icon-size':['interpolate',['linear'],['zoom'],11,.7,14,1],'icon-anchor':'bottom','icon-offset':[0,-4],'icon-allow-overlap':true,'text-field':['get','sd'],'text-font':['Inter-SemiBold'],'text-size':11,'text-anchor':'top','text-offset':[0,.4],'text-optional':true},paint:{'text-color':'#0b3d91','text-halo-color':'#fff','text-halo-width':1.6}});
  map.addLayer({id:'pt-sym',type:'symbol',source:'pt',minzoom:13,layout:{'icon-image':['get','ic'],'icon-size':.75,'icon-anchor':'bottom','icon-allow-overlap':true,'text-field':['get','sd'],'text-font':['Inter-SemiBold'],'text-size':11,'text-anchor':'top','text-offset':[0,.3],'text-optional':true},paint:{'text-color':'#0b3d91','text-halo-color':'#fff','text-halo-width':1.6}});
- map.addLayer({id:'kw-pt',type:'symbol',source:'kw',layout:{'icon-image':'kw','icon-size':['interpolate',['linear'],['zoom'],7,.45,11,.75,14,1],'icon-allow-overlap':true,'text-field':['step',['zoom'],'',11,['get','n']],'text-font':['Inter-SemiBold'],'text-size':11,'text-anchor':'top','text-offset':[0,1.1],'text-optional':true},paint:{'text-color':'#8a0000','text-halo-color':'#fff','text-halo-width':1.6}});
+ map.addLayer({id:'kw-pt',type:'symbol',source:'kw',minzoom:13,layout:{'icon-image':'kw','icon-size':.71,'icon-allow-overlap':true,'text-field':['step',['zoom'],'',14,['get','n']],'text-font':['Inter-SemiBold'],'text-size':11,'text-anchor':'top','text-offset':[0,.95],'text-optional':true},paint:{'text-color':'#8a0000','text-halo-color':'#fff','text-halo-width':1.6}});
  map.addLayer({id:'ev-pt',type:'symbol',source:'ev',filter:['==',['get','k'],'p'],layout:{'icon-image':'pb-ev','icon-size':['interpolate',['linear'],['zoom'],7,.4,12,.7],'icon-anchor':'bottom','icon-allow-overlap':true}});
  map.addLayer({id:'pb-spot',type:'symbol',source:'pbs',layout:{'icon-image':['get','ic'],'icon-size':['interpolate',['linear'],['zoom'],7,.32,10,.5,13,.75],'icon-anchor':'bottom','icon-allow-overlap':true,'text-field':['step',['zoom'],'',12,['get','sd']],'text-font':['Inter-SemiBold'],'text-size':11,'text-anchor':'top','text-offset':[0,.2],'text-optional':true},paint:{'text-color':RGD,'text-halo-color':'#fff','text-halo-width':1.6}});
  map.addLayer({id:'pb-sel',type:'circle',source:'pbs',filter:['==',['get','i'],-1],paint:{'circle-radius':14,'circle-color':'rgba(0,0,0,0)','circle-stroke-color':RGD,'circle-stroke-width':3}});
- map.addLayer({id:'kw-sel',type:'circle',source:'kw',filter:['==',['get','i'],-1],paint:{'circle-radius':16,'circle-color':'rgba(0,0,0,0)','circle-stroke-color':KW_C,'circle-stroke-width':3}});
+ map.addLayer({id:'kw-sel',type:'circle',source:'kw',minzoom:13,filter:['==',['get','i'],-1],paint:{'circle-radius':16,'circle-color':'rgba(0,0,0,0)','circle-stroke-color':KW_C,'circle-stroke-width':3}});
  map.setPaintProperty('poi-pt','circle-color',['match',['get','t'],'school',POIC.school,'shop',POIC.shop,POIC.rent]);
 }
 function hoverV4(hover,once,ph){
@@ -546,7 +547,7 @@ function vrList(L,title){if(!L.length)return'';return`<div class="blk"><h3>${esc
 function showVr(r,fly){if(!r)return;sel=null;selV4('',-1);$('detail').innerHTML=`<div class="top" style="background:${VR_C[r.nav]}"><div class="brand pb" style="color:${VR_C[r.nav]}">Vogelreservat BAFU</div><h2>${esc(r.name)}</h2><div class="sec">Teilgebiet ${esc(r.tg)} · ${esc(r.lvl)}e Bedeutung</div><button class="x" aria-label="Schliessen">×</button></div><div class="body"><div class="blk">${r.nav==='v'?'<div class="danger"><b>Schifffahrt verboten</b><br>Befahren mit Kanu, Kajak und SUP ist in diesem Teilgebiet nicht erlaubt.</div>':r.nav==='e'?'<div class="wxw"><b>Schifffahrt eingeschränkt</b><br>Die Einschränkungen stehen im Objektblatt. Meist gelten Fahrverbote in Teilflächen oder zu bestimmten Jahreszeiten.</div>':'<div class="wxok">Schifffahrt nicht eingeschränkt. Rücksicht auf rastende Vögel nehmen und Abstand halten.</div>'}<dl><dt>Bestimmungen</dt><dd>${esc(r.cat)}</dd><dt>Objekt</dt><dd>Nr. ${esc(r.nr)}, Teilgebiet ${esc(r.tg)}</dd></dl></div><div class="blk"><p class="mu small">Bundesinventar der Wasser- und Zugvogelreservate von internationaler und nationaler Bedeutung (WZVV), Bundesamt für Umwelt BAFU. Massgebend sind das Objektblatt und die Signalisation vor Ort.</p></div><div class="act"><a class="btn p" href="${esc(r.pdf)}" target="_blank" rel="noopener">Objektblatt (PDF)</a></div></div>`;
  openDetail();if(fly&&mapReady)map.fitBounds([[r.bb[0],r.bb[1]],[r.bb[2],r.bb[3]]],{padding:pad(),maxZoom:14,duration:800})}
 
-setTimeout(()=>{window.__dbg={VR,showVr,items,select,PLS,showStage,get map(){return map}}},0);
+setTimeout(()=>{window.__dbg={VR,showVr,items,select,PLS,showStage,PAS,showPa,get map(){return map}}},0);
 // Detailansichten Paddel Buch
 const pbTop=(t,sub,bg)=>`<div class="top pbtop" style="background:${bg||RG}"><div class="brand pb">Paddel Buch</div><h2>${esc(t)}</h2><div class="sec">${sub}</div><button class="x" aria-label="Schliessen">×</button></div>`;
 const txt=t=>t?`<p class="pbtxt">${esc(t).replace(/\n/g,'<br>')}</p>`:'';
@@ -663,7 +664,7 @@ map.on('load',()=>{
  map.addLayer({id:'rv-label',type:'symbol',source:'rv',filter:['==',['get','k'],'start'],minzoom:9.5,layout:{'text-field':['get','n'],'text-font':['Inter-SemiBold'],'text-size':13,'text-offset':[0,-1.1],'text-anchor':'bottom','text-optional':true},paint:{'text-color':'#0b2830','text-halo-color':'#fff','text-halo-width':1.5}});
  addV4Layers();
  const pop=new maplibregl.Popup({closeButton:false,closeOnClick:false,offset:10});
- const hover=(l,html,click)=>{map.on('mouseenter',l,e=>{map.getCanvas().style.cursor='pointer';const h=html(e.features[0].properties);if(h)pop.setLngLat(e.lngLat).setHTML(h).addTo(map)});map.on('mouseleave',l,()=>{map.getCanvas().style.cursor='';pop.remove()});map.on('click',l,e=>{e.originalEvent.cancelBubble=true;click(e.features[0].properties)})};
+ const hover=(l,html,click)=>{let last=null;const upd=e=>{map.getCanvas().style.cursor='pointer';const pr=e.features[0].properties;const h=html(pr);if(!h){pop.remove();last=null;return}if(last!==h){pop.setHTML(h);last=h}pop.setLngLat(e.lngLat);if(!pop.isOpen())pop.addTo(map)};map.on('mouseenter',l,upd);map.on('mousemove',l,upd);map.on('mouseleave',l,()=>{last=null});map.on('mouseleave',l,()=>{map.getCanvas().style.cursor='';pop.remove()});map.on('click',l,e=>{pop.remove();click(e.features[0].properties)})};
  let busy=false;const once=f=>p=>{if(busy)return;busy=true;setTimeout(()=>busy=false,50);f(p)};
  hoverV4(hover,once,0);
  ['st-pt','poi-pt','rv-start','rv-spot','rv-end','rv-hit','pl-hit'].forEach(l=>{
@@ -673,6 +674,7 @@ map.on('load',()=>{
   else hover(l,p=>{const o=byId.get(p.id);return o?`<b>${esc(o.river)}</b><br>${esc(o.section)}<br>WW ${esc(o.grade||'?')} · ${esc(LV[levelOf(o)].t)}`:''},once(p=>{const o=byId.get(p.id);if(o)select(o,false)}));
  });
  hoverV4(hover,once,1);
+ map.on('click',e=>{setTimeout(()=>{if(busy)return;const L=['ob-fill','ob-line','ev-fill','vr-fill','pa-fill'].filter(id=>map.getLayer(id)&&map.getLayoutProperty(id,'visibility')!=='none');const b=4;const f=map.queryRenderedFeatures([[e.point.x-b,e.point.y-b],[e.point.x+b,e.point.y+b]],{layers:L});if(!f.length)return;const p=f[0].properties,id=f[0].layer.id;busy=true;setTimeout(()=>busy=false,50);if(id.startsWith('ob'))showObs(OBS[p.i],false);else if(id==='ev-fill')showEv(EVS[p.i],false);else if(id==='vr-fill')showVr(VR[p.i],false);else showPa(PAS[p.i],false)},0)});
  mapReady=true;apply(true);layersForView();
 });
 
